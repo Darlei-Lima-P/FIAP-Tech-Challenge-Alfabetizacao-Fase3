@@ -236,7 +236,116 @@ Os usos propostos incluem:
 
 Detalhes em [`docs/registro-uso-ia.md`](docs/registro-uso-ia.md).
 
-## 8. FinOps
+## 8. Modelagem supervisionada
+
+### 8.1 Objetivo do modelo
+
+Foi desenvolvido um modelo de classificação supervisionada para estimar a classe de alfabetização dos estudantes a partir de indicadores educacionais e características estruturais das redes de ensino.
+
+A variável-alvo utilizada foi `fl_alfabetizado`, com duas classes:
+
+- `0`: Não alfabetizado;
+- `1`: Alfabetizado.
+
+A definição do alvo segue o critério aplicado na base de modelagem, derivado da proficiência igual ou superior a 743 pontos. A variável `proficiencia` não foi utilizada como preditora, pois participa diretamente da definição do alvo.
+
+### 8.2 Base de modelagem e pré-processamento
+
+A base utilizada foi `data/gold/fase3/base_modelagem.parquet`, com 3.354.661 registros referentes aos anos de 2023 e 2024.
+
+Foram utilizadas 18 variáveis preditoras: três categóricas (`dt_ano`, `cd_uf` e `cd_rede`) e 15 numéricas relacionadas à estrutura e à infraestrutura escolar.
+
+O pré-processamento foi implementado com `ColumnTransformer` e pipelines do Scikit-learn:
+
+- **Variáveis numéricas:** imputação pela mediana e padronização com `StandardScaler`;
+- **Variáveis categóricas:** imputação pela categoria mais frequente e codificação com `OneHotEncoder(handle_unknown="ignore")`.
+
+O pré-processador foi ajustado somente com os dados de treinamento e aplicado aos conjuntos de validação e teste. Identificadores individuais e geográficos não foram utilizados como preditores diretos; `id_municipio` foi utilizado para formar os grupos da divisão dos dados.
+
+### 8.3 Separação dos dados e prevenção de data leakage
+
+Foi utilizado `GroupShuffleSplit`, agrupando os registros por município (`id_municipio`). Assim, um mesmo município não aparece simultaneamente nos conjuntos de treinamento, validação e teste.
+
+A divisão foi realizada em duas etapas:
+
+1. 80% dos registros para desenvolvimento e 20% para teste;
+2. dentro do conjunto de desenvolvimento, 80% para treinamento e 20% para validação.
+
+| Conjunto | Registros |
+|---|---:|
+| Treinamento | 2.169.927 |
+| Validação | 512.059 |
+| Desenvolvimento total | 2.681.986 |
+| Teste reservado | 672.675 |
+
+O conjunto de teste permaneceu reservado durante a comparação e a otimização dos modelos. Após a seleção da configuração, o XGBoost final foi ajustado com todo o conjunto de desenvolvimento e avaliado no teste.
+
+### 8.4 Algoritmos avaliados e seleção
+
+Foram comparados quatro experimentos: Regressão Logística, Random Forest sem balanceamento, Random Forest com balanceamento de classes e XGBoost.
+
+O XGBoost foi selecionado para a avaliação final por apresentar o melhor F1 macro e ROC-AUC na comparação inicial de validação entre as configurações testadas. A escolha não significa superioridade em todas as métricas: o Random Forest balanceado apresentou maior capacidade de identificar a classe não alfabetizado em sua avaliação de validação, sendo uma alternativa relevante caso essa classe tenha prioridade operacional.
+
+### 8.5 Otimização de hiperparâmetros
+
+Foi realizada uma comparação controlada de três configurações do XGBoost, mantendo os mesmos conjuntos de treinamento e validação.
+
+| Configuração | `n_estimators` | `max_depth` | `learning_rate` | F1 macro na validação | ROC-AUC na validação |
+|---|---:|---:|---:|---:|---:|
+| Baseline | 150 | 6 | 0,05 | **0,5768** | **0,6372** |
+| Menor profundidade | 150 | 4 | 0,05 | 0,5477 | 0,6339 |
+| Menor profundidade e taxa | 200 | 4 | 0,03 | 0,5429 | 0,6326 |
+
+A configuração baseline apresentou o melhor resultado e foi mantida. Os demais parâmetros foram `subsample=0.8`, `colsample_bytree=0.8`, `objective="binary:logistic"`, `eval_metric="logloss"` e `tree_method="hist"`.
+
+O F1 macro foi 0,5829 no treinamento e 0,5768 na validação, uma diferença de 0,0061. Essa proximidade é um sinal favorável nessa métrica, mas não comprova, isoladamente, ausência de overfitting.
+
+### 8.6 Avaliação final no conjunto de teste
+
+O modelo final foi avaliado em 672.675 registros do conjunto de teste, que não participou da seleção dos hiperparâmetros.
+
+| Métrica | Resultado |
+|---|---:|
+| Acurácia | 59,67% |
+| Precisão | 63,33% |
+| Recall | 75,98% |
+| F1-score | 69,09% |
+| F1 macro | 55,55% |
+| ROC-AUC | 0,6220 |
+| Balanced Accuracy | 55,95% |
+
+A matriz de confusão, considerando as classes na ordem 0 (não alfabetizado) e 1 (alfabetizado), foi:
+
+| Classe real / prevista | Não alfabetizado | Alfabetizado |
+|---|---:|---:|
+| Não alfabetizado | 98.315 | 175.465 |
+| Alfabetizado | 95.800 | 303.095 |
+
+O recall foi de 35,91% para a classe não alfabetizado e 75,98% para a classe alfabetizado. Portanto, o modelo identifica melhor os estudantes classificados como alfabetizados e apresenta desempenho desigual entre as classes. Esse comportamento deve ser considerado antes de qualquer aplicação prática.
+
+### 8.7 Interpretabilidade: Feature Importance e SHAP
+
+A interpretabilidade foi explorada por meio da importância interna das variáveis no XGBoost e dos valores SHAP. Foram gerados os gráficos de Feature Importance, SHAP Beeswarm, importância global SHAP e SHAP Waterfall.
+
+As categorias de UF apareceram entre as variáveis mais influentes, com destaque para `cd_uf_23`, `cd_uf_29`, `cd_uf_41` e `cd_uf_31`. Entre as variáveis numéricas, destacaram-se `tx_escolas_internet`, `qt_escolas_censo` e `qt_matriculas_censo`.
+
+A análise SHAP foi calculada sobre uma amostra do conjunto de teste. Os valores SHAP representam contribuições das variáveis para as previsões do modelo; não demonstram causalidade. A predominância de categorias geográficas indica que o modelo utiliza diferenças territoriais como sinal preditivo e merece atenção na interpretação.
+
+Os arquivos de resultados foram armazenados em `reports/`, e os gráficos em `reports/images/`.
+
+### 8.8 Limitações da modelagem
+
+- O desempenho é desigual entre as classes, com recall menor para estudantes não alfabetizados.
+- A divisão por município avalia a generalização para municípios não vistos, mas municípios de um mesmo estado podem estar nos conjuntos de desenvolvimento e teste. Portanto, não comprova generalização para estados inteiramente desconhecidos.
+- A influência elevada das variáveis de UF indica dependência de padrões geográficos; não se deve interpretar essa associação como causalidade.
+- A disponibilidade temporal dos indicadores externos, especialmente os provenientes do Censo e de outras fontes, precisa ser verificada antes de utilizar o modelo em um cenário de previsão anterior à avaliação dos estudantes.
+- A otimização foi limitada à comparação de três configurações do XGBoost. Não foi realizada busca exaustiva de hiperparâmetros nem validação cruzada.
+
+Assim, o modelo deve ser considerado uma ferramenta experimental de classificação e análise, não um substituto de avaliações educacionais oficiais ou de decisões de políticas públicas.
+
+---
+
+## 9. FinOps
 
 As decisões de arquitetura reduzem custo sem comprometer a análise:
 
@@ -246,13 +355,13 @@ As decisões de arquitetura reduzem custo sem comprometer a análise:
 - serviços gerenciados e execução sob demanda evitam capacidade ociosa;
 - métricas de uso permitem acompanhar volume, duração e consumo.
 
-## 9. Decisões de arquitetura e trade-offs
+## 10. Decisões de arquitetura e trade-offs
 
 - **Batch e streaming:** batch garante reprocessamento histórico; streaming atende eventos recentes e adiciona complexidade operacional.
 - **Data lake e warehouse:** o data lake preserva flexibilidade e baixo custo; a Gold fornece o contrato analítico necessário ao consumo.
 - **Custo e performance:** arquivos colunares, partições e agregações antecipadas favorecem consultas rápidas com menor leitura.
 
-## 10. Reprodução e validação
+## 11. Reprodução e validação
 
 Requer Python 3.11 ou superior.
 
@@ -266,7 +375,7 @@ python -m pytest -q
 
 Resultado de referência: `9 passed`.
 
-## 11. Estrutura e evidências
+## 12. Estrutura e evidências
 
 - [Mapa das pastas](docs/estrutura-do-projeto.md)
 - `data/bronze/`: dados de entrada em Parquet
@@ -279,9 +388,10 @@ Resultado de referência: `9 passed`.
 As definições e consultas do Amazon Athena estão em `sql/athena/`. Consultas
 complementares de validação estão versionadas em `sql/analytics/`.
 
-## 12. Tecnologias utilizadas
+## 13. Tecnologias utilizadas
 
-Python, Pandas, DuckDB, PyArrow, Parquet, Amazon S3, AWS Glue Data Catalog,
+Python, Pandas, DuckDB, PyArrow, Parquet, Scikit-learn,
+XGBoost, SHAP, Amazon S3, AWS Glue Data Catalog,
 Amazon Athena, Amazon CloudWatch, Amazon Bedrock e Amazon SageMaker.
 
 O código, os testes e a documentação estão versionados em branches de

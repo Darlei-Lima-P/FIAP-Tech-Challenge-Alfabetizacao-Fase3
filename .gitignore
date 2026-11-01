@@ -1,6 +1,21 @@
-.venv/ 
-__pycache__/ 
-data/raw/ 
+# Ambientes virtuais
+.venv/
+.venv_antigo/
+
+# Python
+__pycache__/
+*.py[cod]
 .pytest_cache/
+
+# Dados locais
+data/raw/
+
+# Notebooks
 .ipynb_checkpoints/
+
+# Artefatos temporários
 artifacts/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
