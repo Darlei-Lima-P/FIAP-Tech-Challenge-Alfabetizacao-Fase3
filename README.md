@@ -10,6 +10,11 @@ A solução implementa um pipeline híbrido, escalável e confiável para integr
 resultados, metas e microdados educacionais, apoiando análises e políticas
 públicas baseadas em evidências.
 
+Na etapa analítica, o objetivo é classificar se um aluno é alfabetizado ou não
+alfabetizado e interpretar padrões territoriais e escolares associados às
+previsões. Os resultados apoiam o diagnóstico das redes de ensino, a
+priorização do acompanhamento e a discussão de políticas públicas.
+
 ---
 
 ## 2. Fonte dos dados
@@ -343,6 +348,67 @@ Os arquivos de resultados foram armazenados em `reports/`, e os gráficos em `re
 
 Assim, o modelo deve ser considerado uma ferramenta experimental de classificação e análise, não um substituto de avaliações educacionais oficiais ou de decisões de políticas públicas.
 
+### 8.9 Principais insights e respostas de negócio
+
+O diagnóstico territorial utiliza os indicadores oficiais agregados de
+alfabetização e metas. A modelagem utiliza a base de alunos efetivamente
+avaliados, com 3.354.661 registros. As taxas desses dois recortes têm
+denominadores e métodos de cálculo diferentes e devem ser interpretadas
+separadamente.
+
+| Pergunta de negócio | Evidência e interpretação |
+|---|---|
+| Quais fatores estão associados à alfabetização? | As previsões dependem fortemente do contexto territorial. Na análise SHAP, também aparecem acesso à internet, quantidade de escolas e matrículas por escola. São associações preditivas, sem demonstração de causalidade. |
+| Quais municípios demandam maior atenção? | Em 2024, 2.444 municípios ficaram abaixo de suas metas. Sério/RS, Arroio do Padre/RS e São Vendelino/RS apresentam déficits de 68,9, 61,8 e 55 pontos percentuais, respectivamente. Esses exemplos orientam o aprofundamento do diagnóstico; a prioridade também deve considerar o número de alunos e a participação na avaliação. |
+| Quais territórios apresentam resultados semelhantes? | Bahia, Sergipe e Rio Grande do Norte registraram taxas de 35,96%, 38,39% e 39,29%. Paraná, Espírito Santo, Minas Gerais e Goiás ficaram entre 70,42% e 72,74%. A semelhança é descritiva, baseada nas taxas observadas. Não foi realizado clustering nem comprovada equivalência de contexto ou de práticas educacionais. |
+| Como apoiar a antecipação de dificuldades para atingir metas futuras? | O uso atual é acompanhar a evolução histórica e a distância para as metas. A previsão temporal de não atingimento de metas municipais é uma evolução proposta, ainda não implementada e validada. O modelo atual classifica alunos. |
+| Quais variáveis mais influenciam o modelo? | As categorias de UF, especialmente Ceará, Bahia, Paraná e Minas Gerais, se destacam na importância interna do XGBoost. A análise SHAP complementa essa leitura com contribuições de indicadores escolares. Importância não representa a taxa de alfabetização nem o efeito causal de uma variável. |
+
+Em nível nacional, a alfabetização na rede pública avançou de 55,9% em 2023
+para 59,2% em 2024, uma alta de 3,3 pontos percentuais. O resultado ficou 0,7
+ponto percentual abaixo da meta de 59,9% para 2024. Em relação ao objetivo
+de 80% para 2030, a distância observada em 2024 foi de 20,8 pontos
+percentuais. Essa comparação com a meta não constitui uma previsão.
+
+As evidências estão em [`docs/evidencias/fase-3/`](docs/evidencias/fase-3/),
+[`reports/`](reports/) e [`reports/images/`](reports/images/).
+
+### 8.10 Aplicação prática para políticas públicas
+
+As recomendações a seguir são propostas da equipe a partir dos resultados.
+A análise não testou a eficácia de intervenções específicas e não comprova
+que os municípios com maior déficit também apresentem baixa conectividade.
+
+| Uso para a gestão | Ação recomendada | Acompanhamento |
+|---|---|---|
+| Priorizar o apoio pedagógico | Combinar distância da meta, volume de alunos e participação na avaliação para selecionar redes que demandam atenção. Nessas redes, aprofundar o diagnóstico das habilidades de alfabetização e orientar ações de recuperação da aprendizagem. | Evolução da alfabetização, distância para a meta e cobertura da avaliação. |
+| Investigar as condições de conectividade | Cruzar o diagnóstico educacional com a cobertura de internet do Censo Escolar. Nas redes com déficit e baixa cobertura, levantar as escolas sem acesso e avaliar as condições de uso dos recursos digitais antes de direcionar investimentos. | Cobertura de internet nas escolas e evolução dos resultados educacionais. |
+| Comparar práticas entre redes | Selecionar redes de porte e contexto semelhantes, com resultados diferentes, para investigar práticas pedagógicas e possibilidades de adaptação local. Taxas próximas, isoladamente, não bastam para definir esses pares. | Evolução das taxas e dos indicadores de contexto das redes comparadas. |
+
+O fluxo de decisão proposto é consultar os indicadores territoriais,
+selecionar redes por critérios transparentes, aprofundar o diagnóstico
+local, definir as ações e revisar os resultados ao longo do tempo. As
+previsões do modelo entram como informação complementar. O baixo recall
+para alunos não alfabetizados impede que sejam usadas como critério
+exclusivo para selecionar ou excluir estudantes do apoio educacional.
+
+### 8.11 Possíveis evoluções futuras
+
+- Incorporar séries históricas adicionais e validar a generalização temporal
+  antes de desenvolver alertas de não atingimento de metas municipais.
+- Avaliar o uso das variáveis socioeconômicas já disponíveis na base,
+  verificando sua disponibilidade no momento da previsão. População, PIB e
+  densidade não integram os 18 preditores atuais.
+- Ampliar a validação por grupos e a comparação de modelos, examinando o
+  desempenho por território e por classe. Ajustar limiares e balanceamento
+  conforme o custo dos erros na aplicação pretendida.
+- Avaliar calibração e desempenho das probabilidades agregadas por município
+  antes de usá-las em decisões territoriais.
+- Aprofundar hipóteses analíticas, relações entre variáveis e comparações
+  entre redes de contexto semelhante.
+- Automatizar a sequência de preparação, treinamento e avaliação e preservar
+  a tabela completa dos experimentos para ampliar a rastreabilidade.
+
 ---
 
 ## 9. FinOps
@@ -363,17 +429,93 @@ As decisões de arquitetura reduzem custo sem comprometer a análise:
 
 ## 11. Reprodução e validação
 
-Requer Python 3.11 ou superior.
+Requer Python 3.11 ou superior e Git LFS para obter os arquivos grandes.
+Execute os comandos de processamento e modelagem a partir da raiz do
+repositório.
+
+### 11.1 Obter o código e os dados
+
+```bash
+git clone https://github.com/Darlei-Lima-P/FIAP-Tech-Challenge-Alfabetizacao-Fase3.git
+cd FIAP-Tech-Challenge-Alfabetizacao-Fase3
+git checkout feature/modelagem-shap-darlei
+git lfs install
+git lfs pull
+```
+
+A base usada no treinamento está em
+`data/gold/fase3/base_modelagem.parquet`. Os arquivos Parquet, CSV e outros
+arquivos grandes são gerenciados por Git LFS. Um arquivo de ponteiro LFS
+não substitui os dados necessários à execução.
+
+### 11.2 Preparar o ambiente
+
+No Windows PowerShell:
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+```
+
+No Linux ou macOS, a ativação do ambiente é feita com
+`source .venv/bin/activate`.
+
+### 11.3 Executar a engenharia de dados e seus testes
+
+```bash
 python -m src.pipeline all
 python -m pytest -q
 ```
 
-Resultado de referência: `9 passed`.
+Resultado de referência: `9 passed`. Esses testes verificam as camadas de
+dados, os indicadores, as regras de qualidade e as visualizações. Eles não
+executam o treinamento e a avaliação dos modelos de Machine Learning.
+
+### 11.4 Reproduzir a modelagem e a explicabilidade
+
+Com a base `data/gold/fase3/base_modelagem.parquet` disponível, execute:
+
+```bash
+python src/avaliar_split.py
+python src/treinar_modelo.py
+python src/otimizar_xgboost.py
+python src/avaliacao_final_shap.py
+```
+
+| Script | Finalidade |
+|---|---|
+| `src/avaliar_split.py` | Conferir a distribuição dos conjuntos e a ausência de municípios compartilhados. |
+| `src/treinar_modelo.py` | Comparar os quatro experimentos de classificação e apresentar os resultados de validação no terminal. |
+| `src/otimizar_xgboost.py` | Comparar três configurações e salvar `reports/otimizacao_xgboost.csv`. |
+| `src/avaliacao_final_shap.py` | Ajustar o modelo final, avaliar o teste reservado, gerar os gráficos e salvar o modelo com o pré-processador. |
+
+Os resultados ficam em `reports/` e `reports/images/`. O artefato final fica
+em `models/modelo_xgboost_final.joblib`. A execução final refaz o treinamento
+e substitui os artefatos gerados nesses caminhos. O tempo e o consumo de
+memória dependem do equipamento.
+
+O comando `python -m src.pipeline all` cobre a engenharia de dados; a
+sequência de Machine Learning acima é executada separadamente.
+
+### 11.5 Regenerar a base enriquecida
+
+Para reconstruir a base de modelagem, utilize
+[`notebooks/01_eda_fase3.ipynb`](notebooks/01_eda_fase3.ipynb), com o
+diretório de trabalho em `notebooks/`. O notebook utiliza as camadas
+Silver, os arquivos externos do Censo Escolar e de área territorial e as
+APIs do IBGE.
+
+Além de `requirements.txt`, a execução desse notebook requer `requests`
+para as consultas HTTP e `xlrd` para a leitura do arquivo `.xls`:
+
+```bash
+pip install requests xlrd
+```
+
+Essa reconstrução não é necessária para consumir a base final já
+disponibilizada. Consultas e ingestões específicas na AWS dependem da
+configuração e das permissões do ambiente correspondente.
 
 ## 12. Estrutura e evidências
 
@@ -394,5 +536,5 @@ Python, Pandas, DuckDB, PyArrow, Parquet, Scikit-learn,
 XGBoost, SHAP, Amazon S3, AWS Glue Data Catalog,
 Amazon Athena, Amazon CloudWatch, Amazon Bedrock e Amazon SageMaker.
 
-O código, os testes e a documentação estão versionados em branches de
-desenvolvimento e integrados à branch principal do projeto.
+O código, os testes e a documentação estão versionados em Git. A branch de
+continuidade da equipe é `feature/modelagem-shap-darlei`.
